@@ -1,8 +1,8 @@
-import sklearn.metrics as ms
 import matplotlib.pyplot as plt
 import pandas as pd
-import statistics as st
 import seaborn as sns
+import sklearn.metrics as ms
+import statistics as st
 
 from sklearn import svm, preprocessing, ensemble
 from sklearn.model_selection import train_test_split, \
@@ -33,6 +33,7 @@ def print_feature_importance( model, colnames ):
         {'Feature': colnames, 'Gini Importance': importances}).sort_values(
             'Gini Importance', ascending=False)
     print(feature_imp_df)
+    print()
 
     return True
 
@@ -46,7 +47,7 @@ def plot_roc_curve( model, X, y ):
 
     plt.title('Receiver Operating Characteristic')
 
-    plt.plot(fpr, tpr, 'b', label = 'AUC = %0.2f' % roc_auc)
+    plt.plot(fpr, tpr, 'b', label = 'AUC = %0.3f' % roc_auc)
     plt.plot([0, 1], [0, 1],'r--')
 
     plt.xlim([0, 1])
@@ -62,33 +63,40 @@ def plot_roc_curve( model, X, y ):
 
 ### MAIN ###
 
-df = pd.read_csv("../data/kaggle/train_expanded.csv")
-print(f"training data shape: {df.shape}")
+datestamp = "20250129.150949"
+df = pd.read_csv(f"../data/kaggle/train.clean.{datestamp}.csv")
 
-x_colnames = [ "Pclass", "Title", "Sex" ]
+#x_colnames = [ "Pclass", "TitleOrd", "GroupSize", "SexOrd", "IsChild", "IsYoungChild", "Parch", "SibSp", "AgeImputed", "Fare", "FarePerPerson" ]
+x_colnames = [ "SexOrd", "FarePerPerson", "AgeImputed", "GroupSize", "Pclass" ]
 y_colname = [ "Survived" ]
 
-X_ = df[ x_colnames ]
-y  = df[ y_colname ].values.ravel()
-
-enc = preprocessing.OrdinalEncoder(max_categories=5)
-X = enc.fit_transform(X_)
+X = df[ x_colnames ]
+y = df[ y_colname ].values.ravel()
 
 #corr_matrix = pd.DataFrame(X, columns=x_colnames).corr()
 #sns.heatmap(corr_matrix, annot=True, cmap='YlGnBu')
 #plt.show()
 
 
-X_train, X_test, y_train, y_test = train_test_split( X, y, \
-                                     test_size=0.3, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split( X, y, test_size=0.3)
+print(f"training data shape: {X_train.shape}")
+print(f"test data shape:     {X_test.shape}")
 
-#classifier = svm.SVC( kernel='rbf', C=1, probability=True )
-classifier = ensemble.GradientBoostingClassifier(max_leaf_nodes=50, max_depth=3)
-#classifier = ensemble.RandomForestClassifier(n_estimators=100)
+classifier = ensemble.GradientBoostingClassifier(n_estimators=120, max_depth=3, random_state=42)
+#classifier = ensemble.RandomForestClassifier(n_estimators=120, random_state=42)
 
 model = classifier.fit(X_train, y_train)
 
 print_accuracy_scores(model, X_test, y_test, 5)
 print_feature_importance(model, x_colnames)
-plot_roc_curve( model, X, y )
+plot_roc_curve( model, X_test, y_test )
 
+df_test = pd.read_csv(f"../data/kaggle/test.clean.{datestamp}.csv")
+y_pred = model.predict_proba(df_test[ x_colnames ])
+df_test["SurvivedProbability"] = y_pred[:,1]
+df_test["Survived"] = (y_pred[:,1] > 0.80).astype(int)
+
+print(y_pred[-5:])
+print(df_test[["PassengerId", "Sex", "SurvivedProbability"]].tail(10))
+
+df_test[["PassengerId", "Survived"]].to_csv(f"../data/kaggle/submit.{datestamp}.csv", index=False)
