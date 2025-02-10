@@ -32,6 +32,21 @@ def print_crossval_scores( model, X, y, num_folds ):
 
     return True
 
+def print_y_scores( y_true, y_pred ):
+
+    tn, fp, fn, tp = ms.confusion_matrix(y_true, y_pred).ravel()
+    print(f"Confusion Matrix: tn {tn}, fp {fp}, fn {fn}, tp {tp:<3}")
+
+    bal_acc   = round( ms.balanced_accuracy_score( y_true, y_pred ), 3 )
+    precision = round( ms.precision_score( y_true, y_pred ), 3 )
+    recall    = round( ms.recall_score( y_true, y_pred ), 3 )
+    f1        = round( ms.f1_score( y_true, y_pred ), 3 )
+
+    print(f"Bal Acc: {bal_acc}, Pre: {precision}, Rec: {recall}, F1: {f1}")
+
+    return True
+
+
 def print_feature_importance( model, colnames ):
 
     importances = model.feature_importances_
@@ -66,6 +81,50 @@ def plot_roc_curve( model, X, y ):
 
     return True
 
+def get_gradient_boosting_model(X, y, s_scoring):
+
+    param_dist = {
+        'learning_rate': np.arange(0.01, 0.1, 0.01),
+        'n_estimators': [50, 75, 100, 125, 150, 175, 200],
+        'max_depth': [2, 3, 4, 5, 6],
+        'subsample': np.arange(0.2, 0.8, 0.1),
+        'max_features': [ 2 ],
+        'min_samples_split': [ 30 ]
+    }
+
+    gb_classifier = ensemble.GradientBoostingClassifier()
+    random_search = RandomizedSearchCV( estimator=gb_classifier,
+                                        param_distributions=param_dist,
+                                        n_iter=50,
+                                        cv=5,
+                                        scoring=s_scoring,
+                                        n_jobs=-1 )
+
+    random_search.fit(X, y)
+    best_params = random_search.best_params_
+    model = random_search.best_estimator_
+
+    print(f"Best Params: {best_params}")
+    print()
+
+    return model
+
+def predict_women_only( X ):
+    y = X["Sex"].apply( lambda k: 1 if k == "female" else 0 )
+    return y
+
+def predict_women_and_children( X ):
+    y =  X.apply( lambda k: 1 if ( k.Sex == "female" ) or \
+                                 ( k.Age <= 13 ) else 0,
+                  axis=1 )
+    return y
+
+def predict_children_and_rich_women( X ):
+    y =  X.apply( lambda k: 1 if (( k.Sex == "female" ) and \
+                                    (k.FarePerPerson >= 5) or \
+                                 ( k.Age <= 13 )) else 0,
+                  axis=1 )
+    return y
 
 ### MAIN ###
 
@@ -73,72 +132,21 @@ datestamp = "20250129.150949"
 df_train = pd.read_csv(f"../data/kaggle/train.clean.{datestamp}.csv")
 df_test = pd.read_csv(f"../data/kaggle/test.clean.{datestamp}.csv")
 
-#x_colnames = [ "Pclass", "TitleOrd", "GroupSize", "SexOrd", "IsChild", "IsYoungChild", "Parch", "SibSp", "AgeImputed", "Fare", "FarePerPerson" ]
-x_colnames = [ "SexOrd", "FarePerPerson", "AgeImputed" ]
+x_colnames = [ "Sex", "Age", "FarePerPerson" ]
 y_colname = [ "Survived" ]
 
 X = df_train[ x_colnames ]
 y = df_train[ y_colname ].values.ravel()
 
-X_train, X_test, y_train, y_test = train_test_split( X, y, test_size=0.4)
-print("Data Shapes")
-print(f"  train: {X_train.shape}")
-print(f"  test:  {X_test.shape}")
-print()
+X_train, X_test, y_train, y_test = train_test_split( X, y, test_size=0.5)
+print(f"Data Shapes train: {X_train.shape}, test: {X_test.shape}")
 
-param_dist = {
-    'learning_rate': np.arange(0.01, 0.1, 0.01),
-    'n_estimators': [50, 75, 100, 125, 150, 175, 200],
-    'max_depth': [2, 3, 4, 5, 6],
-    'subsample': np.arange(0.2, 0.8, 0.1),
-    'max_features': [ 2 ],
-    'min_samples_split': [ 30 ]
-}
+threshold = 0.95
 
-gb_classifier = ensemble.GradientBoostingClassifier()
-random_search = RandomizedSearchCV( estimator=gb_classifier,
-                                    param_distributions=param_dist,
-                                    n_iter=50,
-                                    cv=5,
-                                    scoring='f1',
-                                    n_jobs=-1 )
+y_test_preds = predict_women_only(X_test)
+print_y_scores( y_test, y_test_preds )
 
-#classifier = ensemble.GradientBoostingClassifier(n_estimators=120, max_depth=3, random_state=42)
-#classifier = ensemble.RandomForestClassifier(n_estimators=120, random_state=42)
-#model = classifier.fit(X_train, y_train)
-
-random_search.fit(X_train, y_train)
-best_params = random_search.best_params_
-model = random_search.best_estimator_
-
-print(f"Best Params: {best_params}")
-print()
-
-print_crossval_scores(model, X_test, y_test, 5)
-
-threshold_tuner = TunedThresholdClassifierCV(
-    gb_classifier, scoring="f1", cv=5).fit(X_train, y_train)
-threshold = threshold_tuner.best_threshold_
-
-print(f"Threshold classfier score: {threshold_tuner.best_score_}")
-print()
-
-y_test_preds_proba = model.predict_proba(X_test)
-y_test_preds = (y_test_preds_proba[:,1] > threshold).astype(int)
-
-tn, fp, fn, tp = ms.confusion_matrix(y_test, y_test_preds).ravel()
-print(f"Confusion Matrix, at Threshold {threshold:.3f}")
-print(f"  tn {tn:<3}  fp {fp:<3}")
-print(f"  fn {fn:<3}  tp {tp:<3}")
-print()
-
-y_proba = model.predict_proba(df_test[x_colnames])
-y_preds = (y_proba[:,1] > threshold).astype(int)
-
-df_test["SurvivedProbability"] = y_proba[:,1]
+#df_test["SurvivedProbability"] = y_proba[:,1]
+y_preds = predict_women_only(df_test[x_colnames])
 df_test["Survived"] = y_preds
-
-print_feature_importance(model, x_colnames)
-#plot_roc_curve( model, X_test, y_test )
-
 df_test[["PassengerId", "Survived"]].to_csv(f"../data/kaggle/submit.{datestamp}.csv", index=False)
