@@ -5,6 +5,9 @@ import sklearn.metrics as ms
 import statistics as st
 import numpy as np
 
+import argparse
+import sys
+
 from sklearn import svm, preprocessing, ensemble
 from sklearn.model_selection import TunedThresholdClassifierCV, \
                                     RandomizedSearchCV, \
@@ -32,19 +35,22 @@ def print_crossval_scores( model, X, y, num_folds ):
 
     return True
 
-def print_y_scores( y_true, y_pred ):
+def get_y_scores_string( y_true, y_pred, verbose=False ):
+
+    s_scores = ""
 
     tn, fp, fn, tp = ms.confusion_matrix(y_true, y_pred).ravel()
-    print(f"Confusion Matrix: tn {tn}, fp {fp}, fn {fn}, tp {tp:<3}")
+    if verbose:
+        s_scores = f"Confusion Matrix: tn {tn}, fp {fp}, fn {fn}, tp {tp}\n"
 
     bal_acc   = round( ms.balanced_accuracy_score( y_true, y_pred ), 3 )
     precision = round( ms.precision_score( y_true, y_pred ), 3 )
     recall    = round( ms.recall_score( y_true, y_pred ), 3 )
     f1        = round( ms.f1_score( y_true, y_pred ), 3 )
 
-    print(f"Bal Acc: {bal_acc}, Pre: {precision}, Rec: {recall}, F1: {f1}")
+    s_scores += f"Bal Acc: {bal_acc}, Pre: {precision}, Rec: {recall}, F1: {f1}"
 
-    return True
+    return s_scores
 
 
 def print_feature_importance( model, colnames ):
@@ -109,28 +115,54 @@ def get_gradient_boosting_model(X, y, s_scoring):
 
     return model
 
+def validate_model_name( m ):
+
+    valid_models = [ "women_only",
+                     "women_and_children",
+                     "children_and_rich_women"
+                   ]
+
+    if not m in valid_models:
+        print("No valid model. Choose one:")
+        print("  " + ", ".join(valid_models))
+        sys.exit(1)
+
 def predict_women_only( X ):
     y = X["Sex"].apply( lambda k: 1 if k == "female" else 0 )
     return y
 
 def predict_women_and_children( X ):
     y =  X.apply( lambda k: 1 if ( k.Sex == "female" ) or \
-                                 ( k.Age <= 13 ) else 0,
+                                 ( k.Age <= 6 ) else 0,
                   axis=1 )
     return y
 
 def predict_children_and_rich_women( X ):
     y =  X.apply( lambda k: 1 if (( k.Sex == "female" ) and \
-                                    (k.FarePerPerson >= 5) or \
-                                 ( k.Age <= 13 )) else 0,
+                                    (k.FarePerPerson >= 5.2) or \
+                                 ( k.Age <= 6 )) else 0,
                   axis=1 )
     return y
 
+
 ### MAIN ###
+
+parser = argparse.ArgumentParser( description='Analyze models for Titanic dataset' )
+parser.add_argument('-v', '--verbose', action='store_true', help='Add verbose output')
+parser.add_argument('-m', '--model', help='Name of model to use')
+parser.add_argument('-n', '--number', help='Times to split / analyze data with model' )
+parser.set_defaults( verbose=False, model='women_only', number=3 )
+
+args = vars( parser.parse_args() )
+#print(args)
+
+validate_model_name( args["model"] )
+s_function = "predict_" + args["model"]
 
 datestamp = "20250129.150949"
 df_train = pd.read_csv(f"../data/kaggle/train.clean.{datestamp}.csv")
 df_test = pd.read_csv(f"../data/kaggle/test.clean.{datestamp}.csv")
+#df_test = pd.read_csv(f"../data/kaggle/test.csv")
 
 x_colnames = [ "Sex", "Age", "FarePerPerson" ]
 y_colname = [ "Survived" ]
@@ -139,14 +171,18 @@ X = df_train[ x_colnames ]
 y = df_train[ y_colname ].values.ravel()
 
 X_train, X_test, y_train, y_test = train_test_split( X, y, test_size=0.5)
-print(f"Data Shapes train: {X_train.shape}, test: {X_test.shape}")
+if args['verbose']:
+    print(f"Data Shapes train: {X_train.shape}, test: {X_test.shape}")
 
 threshold = 0.95
 
-y_test_preds = predict_women_only(X_test)
-print_y_scores( y_test, y_test_preds )
+y_test_preds = locals()[s_function](X_test)
+s_scores = get_y_scores_string( y_test, y_test_preds, args['verbose'] )
+print(f"Model: {args['model']}, {s_scores}")
 
 #df_test["SurvivedProbability"] = y_proba[:,1]
-y_preds = predict_women_only(df_test[x_colnames])
+y_preds = locals()[s_function](df_test[x_colnames])
 df_test["Survived"] = y_preds
-df_test[["PassengerId", "Survived"]].to_csv(f"../data/kaggle/submit.{datestamp}.csv", index=False)
+df_test[["PassengerId", "Survived"]].to_csv(
+    f"../data/kaggle/submit.{args['model']}.csv",
+    index=False)
