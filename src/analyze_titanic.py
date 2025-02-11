@@ -133,14 +133,14 @@ def predict_women_only( X ):
 
 def predict_women_and_children( X ):
     y =  X.apply( lambda k: 1 if ( k.Sex == "female" ) or \
-                                 ( k.Age <= 6 ) else 0,
+                                 ( k.AgeImputed <= 6 ) else 0,
                   axis=1 )
     return y
 
 def predict_children_and_rich_women( X ):
     y =  X.apply( lambda k: 1 if (( k.Sex == "female" ) and \
-                                    (k.FarePerPerson >= 5.2) or \
-                                 ( k.Age <= 6 )) else 0,
+                                  ( k.Pclass < 3) ) or \
+                                 ( k.AgeImputed <= 6 ) else 0,
                   axis=1 )
     return y
 
@@ -164,7 +164,7 @@ df_train = pd.read_csv(f"../data/kaggle/train.clean.{datestamp}.csv")
 df_test = pd.read_csv(f"../data/kaggle/test.clean.{datestamp}.csv")
 #df_test = pd.read_csv(f"../data/kaggle/test.csv")
 
-x_colnames = [ "Sex", "Age", "FarePerPerson" ]
+x_colnames = [ "Sex", "AgeImputed", "Pclass" ]
 y_colname = [ "Survived" ]
 
 X = df_train[ x_colnames ]
