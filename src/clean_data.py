@@ -56,6 +56,14 @@ def get_name_and_title( df ):
 
     return df
 
+def print_subset( df ):
+
+    df.sort_values(['GroupSize', 'LastName'], ascending=False, inplace=True)
+    print(df.columns)
+    print(df[ ["Name", "LastName", "Pclass", "FarePerPerson", "Age", "AgeImputed", "Survived" ]].to_string())
+
+    return True
+
 def get_title_dummies( df ):
 
     l_titles = [ 'Mr', 'Mrs', 'Miss', 'Master' ]
@@ -72,6 +80,11 @@ def get_title_dummies( df ):
 
     return df_titles
 
+def scaler_fit_transform( scaler, df ):
+
+    l_transformed = scaler.fit_transform(df)
+    return l_transformed[:,0].round(4)
+
 ### Main ###
 
 # load train data
@@ -83,11 +96,13 @@ df_test["Survived"] = np.nan
 
 df_full = pd.concat([df_train, df_test])
 
+# preprocess categorical data (sex and title) into ordinal values
 enc = preprocessing.OrdinalEncoder(max_categories=5)
 df_full = get_name_and_title( df_full )
 df_full["TitleOrd"] = enc.fit_transform(df_full[["Title"]])
 df_full["SexOrd"] = enc.fit_transform(df_full[["Sex"]])
 
+# create dummy variables / categories for the 5 title groupings
 df_titles = get_title_dummies( df_full )
 df_full = pd.merge(df_full, df_titles, on="PassengerId")
 
@@ -100,13 +115,20 @@ df_full["Fare"]          = df_full["Fare"].apply( lambda v: 0 if np.isnan(v) els
 df_full["FarePerPerson"] = round((df_full["Fare"] / df_full["GroupSize"]),4)
 
 imputer = impute.KNNImputer(n_neighbors=5)
-l_imputed = imputer.fit_transform(df_full[[ "Age", "SexOrd", "TitleOrd", "Pclass", "FarePerPerson", "GroupSize" ]])
+l_imputed = imputer.fit_transform(df_full[[ "Age", "IsMale", "Mr", "Mrs", "Miss", "Master", "Other", "Pclass" ]])
 df_full["AgeImputed"] = l_imputed[:,0].round(4)
 
-df_sub = df_full[ (df_full["Age"].isna()) ].copy()
-#df_sub.sort_values(['GroupSize', 'LastName'], ascending=False, inplace=True)
-#print(df_sub.columns)
-#print(df_sub[ ["Name", "LastName", "Pclass", "FarePerPerson", "Age", "AgeImputed", "Survived" ]].to_string())
+# normalize the age and fare per person features, to reduce impact of outliers
+robust = preprocessing.RobustScaler()
+minmax = preprocessing.MinMaxScaler()
+
+df_full["AgeRobust"] = scaler_fit_transform( robust, df_full[["AgeImputed"]] )
+df_full["AgeMinMax"] = scaler_fit_transform( minmax, df_full[["AgeImputed"]] )
+
+df_full["FppRobust"] = scaler_fit_transform( robust, df_full[["FarePerPerson"]] )
+df_full["FppMinMax"] = scaler_fit_transform( minmax, df_full[["FarePerPerson"]] )
+
+#print_subset(df_full[ (df_full["Age"].isna() ) ].copy())
 
 # prep the cleaned training data to write
 df_train_clean = df_full[ df_full[ "Survived" ].notna() ].copy()
