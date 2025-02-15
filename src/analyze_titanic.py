@@ -5,6 +5,7 @@ import sklearn.metrics as ms
 import statistics as st
 import numpy as np
 
+import random
 import argparse
 import sys
 
@@ -115,11 +116,15 @@ def get_gradient_boosting_model(X, y, s_scoring):
 
     return model
 
+def get_random_forest_model( X, y ):
+    pass
+
 def validate_model_name( m ):
 
     valid_models = [ "women_only",
                      "women_and_children",
-                     "children_and_rich_women"
+                     "children_and_rich_women",
+                     "title_forest"
                    ]
 
     if not m in valid_models:
@@ -176,12 +181,19 @@ if args['verbose']:
 
 threshold = 0.95
 
-y_test_preds = locals()[s_function](X_test)
-s_scores = get_y_scores_string( y_test, y_test_preds, args['verbose'] )
+if s_function == "predict_title_forest":
+    print("Title Forest goes here!")
+    y_test_preds = [random.randint(0,1) for _ in range(len(X_test))]
+    y_preds = [random.randint(0,1) for _ in range(len(df_test))]
+    s_scores = get_y_scores_string( y_test, y_test_preds, args['verbose'] )
+else:
+    y_test_preds = locals()[s_function](X_test)
+    s_scores = get_y_scores_string( y_test, y_test_preds, args['verbose'] )
+    #df_test["SurvivedProbability"] = y_proba[:,1]
+    y_preds = locals()[s_function](df_test[x_colnames])
+
 print(f"Model: {args['model']}, {s_scores}")
 
-#df_test["SurvivedProbability"] = y_proba[:,1]
-y_preds = locals()[s_function](df_test[x_colnames])
 df_test["Survived"] = y_preds
 df_test[["PassengerId", "Survived"]].to_csv(
     f"../data/kaggle/submit.{args['model']}.csv",
