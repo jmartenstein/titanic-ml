@@ -124,6 +124,8 @@ def validate_model_name( m ):
     valid_models = [ "women_only",
                      "women_and_children",
                      "children_and_rich_women",
+                     "rich_women",
+                     "rich_non_misters",
                      "title_forest"
                    ]
 
@@ -139,6 +141,18 @@ def predict_women_only( X ):
 def predict_women_and_children( X ):
     y =  X.apply( lambda k: 1 if ( k.Sex == "female" ) or \
                                  ( k.AgeImputed <= 6 ) else 0,
+                  axis=1 )
+    return y
+
+def predict_rich_women( X ):
+    y =  X.apply( lambda k: 1 if (( k.Sex == "female" ) and \
+                                  ( k.Pclass < 3)) else 0,
+                  axis=1 )
+    return y
+
+def predict_rich_non_misters( X ):
+    y =  X.apply( lambda k: 1 if (( k.Mr == 0 ) and \
+                                  ( k.Pclass < 3)) else 0,
                   axis=1 )
     return y
 
@@ -164,12 +178,12 @@ args = vars( parser.parse_args() )
 validate_model_name( args["model"] )
 s_function = "predict_" + args["model"]
 
-datestamp = "20250129.150949"
+datestamp = "20250215.112744"
 df_train = pd.read_csv(f"../data/kaggle/train.clean.{datestamp}.csv")
 df_test = pd.read_csv(f"../data/kaggle/test.clean.{datestamp}.csv")
 #df_test = pd.read_csv(f"../data/kaggle/test.csv")
 
-x_colnames = [ "Sex", "AgeImputed", "Pclass" ]
+x_colnames = [ "Sex", "AgeImputed", "Pclass", "Mr" ]
 y_colname = [ "Survived" ]
 
 X = df_train[ x_colnames ]
