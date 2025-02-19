@@ -64,17 +64,35 @@ def print_subset( df ):
 
     return True
 
-def get_title_dummies( df ):
+def get_p3_or_dead_title(row):
+    l_dead_titles = [ 'Capt', 'Rev', 'Mr' ]
+
+    s_title = row['Title']
+    b_pclass3 = row['Pclass3']
+
+    if ( s_title in l_dead_titles ) or ( b_pclass3 == 1 ):
+        return 1
+    else:
+        return 0
+
+def get_other_titles( row ):
 
     l_titles = [ 'Mr', 'Mrs', 'Miss', 'Master' ]
+    s_title = row['TitleGrouped']
 
-    df_temp = pd.DataFrame(df[["PassengerId", "Title"]])
+    if (not s_title in l_titles):
+        if row['Sex'] == 'male':
+            return 'OtherMale'
+        else:
+            return 'OtherFemale'
+    else:
+        return s_title
 
-    df_temp['TitleReduced'] = df_temp['Title']
-    df_temp['TitleReduced'] = df_temp['TitleReduced'].apply(
-        lambda v: 'Other' if not v in l_titles else v )
+def get_title_dummies( df ):
 
-    df_titles = pd.get_dummies(df_temp['TitleReduced'])
+    df_temp = pd.DataFrame(df[["PassengerId", "TitleGrouped", "Sex"]])
+
+    df_titles = pd.get_dummies(df_temp['TitleGrouped'])
     df_titles["PassengerId"] = df_temp['PassengerId']
     df_titles = df_titles.map(lambda x: int(x))
 
@@ -102,6 +120,9 @@ df_full = get_name_and_title( df_full )
 df_full["TitleOrd"] = enc.fit_transform(df_full[["Title"]])
 df_full["SexOrd"] = enc.fit_transform(df_full[["Sex"]])
 
+df_full['TitleGrouped'] = df_full['Title']
+df_full['TitleGrouped'] = df_full.apply( get_other_titles, axis=1 )
+
 # create dummy variables / categories for the 5 title groupings
 df_titles = get_title_dummies( df_full )
 df_full = pd.merge(df_full, df_titles, on="PassengerId")
@@ -110,12 +131,17 @@ df_full["IsMale"]        = df_full["Sex"].apply( lambda v: 1 if v == "male" else
 df_full["IsChild"]       = df_full["Age"].apply( lambda v: 1 if v <= 16 else 0)
 df_full["IsYoungChild"]  = df_full["Age"].apply( lambda v: 1 if v <= 8 else 0)
 df_full["GroupSize"]     = df_full["SibSp"] + df_full["Parch"] + 1
+df_full["LargeGroup"]    = df_full["GroupSize"].apply( lambda v: 1 if v >= 5 else 0)
 df_full["IsAlone"]       = df_full["GroupSize"].apply( lambda v: 1 if v == 1 else 0 )
 df_full["Fare"]          = df_full["Fare"].apply( lambda v: 0 if np.isnan(v) else v )
 df_full["FarePerPerson"] = round((df_full["Fare"] / df_full["GroupSize"]),4)
+df_full["Pclass3"]       = df_full["Pclass"].apply( lambda v: 1 if v == 3 else 0 )
+
+df_full["P3orDeadTitle"] = df_full.apply( get_p3_or_dead_title, axis=1 )
 
 imputer = impute.KNNImputer(n_neighbors=5)
-l_imputed = imputer.fit_transform(df_full[[ "Age", "IsMale", "Mr", "Mrs", "Miss", "Master", "Other", "Pclass" ]])
+l_imputed = imputer.fit_transform(df_full[[ "Age", "IsMale", "Mr", "Mrs", "Miss", "Master", "OtherMale", "OtherFemale", "Pclass" ]])
+
 df_full["AgeImputed"] = l_imputed[:,0].round(4)
 
 # normalize the age and fare per person features, to reduce impact of outliers
