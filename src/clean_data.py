@@ -3,6 +3,7 @@ import numpy as np
 
 import argparse
 import re
+import math
 
 from sklearn  import preprocessing, impute
 from datetime import datetime
@@ -35,33 +36,44 @@ def split_title( row ):
         l_subs.pop()
     return l_subs
 
-def filter_age( row, n_filter ):
+def split_cabin_deck( row ):
 
-    n_result = 0
-    n_age = row["Age"]
+    if type(row) is float:
+        return ""
+    else:
+        # split the letters into a list
+        l_letters = re.findall( "[a-zA-Z]+", row )
 
-    if ~np.isnan(n_age):
-        if n_age < n_filter:
-            n_result = 1
+        # check if all of the letters are the same; in rare cases where they
+        # are not the same, the first character is "F", so we're choosing the
+        # second
+        if all(x == l_letters[0] for x in l_letters):
+            return l_letters[0]
+        else:
+            return l_letters[1]
 
-    return n_result
+def split_cabin_room( row ):
 
+    if type(row) is float:
+        return ""
+    else:
+        # split the letters into a list
+        l_numbers = re.findall( "[0-9]+", row )
 
-def get_name_and_title( df ):
-
-    temp1 = df.apply( split_last_name, axis=1, result_type='expand' )
-    df["LastName"] = temp1[0]
-
-    temp2 = temp1.apply( split_title, axis=1, result_type='expand' )
-    df["Title"] = temp2[0]
-
-    return df
+        if len(l_numbers) == 0:
+            return ""
+        else:
+            median = math.ceil((len(l_numbers) - 1) / 2)
+            if all(x == l_numbers[0] for x in l_numbers):
+                return int(l_numbers[0])
+            else:
+                return int(l_numbers[median])
 
 def print_subset( df ):
 
     df.sort_values(['GroupSize', 'LastName'], ascending=False, inplace=True)
     print(df.columns)
-    print(df[ ["Name", "LastName", "Pclass", "FarePerPerson", "Age", "AgeImputed", "Survived" ]].to_string())
+    print(df[ ["LastName", "Title", "Survived", "Pclass", "Embarked", "Cabin", "HasCabin", "CabinDeck", "CabinRoom" ]].to_string())
 
     return True
 
@@ -89,15 +101,16 @@ def get_other_titles( row ):
     else:
         return s_title
 
-def get_title_dummies( df ):
+def get_column_dummies( df, s_column ):
 
-    df_temp = pd.DataFrame(df[["PassengerId", "TitleGrouped", "Sex"]])
+    df_temp = pd.DataFrame(df[["PassengerId", s_column ]])
 
-    df_titles = pd.get_dummies(df_temp['TitleGrouped'])
+    df_titles = pd.get_dummies(df_temp[s_column])
     df_titles["PassengerId"] = df_temp['PassengerId']
     df_titles = df_titles.map(lambda x: int(x))
 
     return df_titles
+
 
 def scaler_fit_transform( scaler, df ):
 
@@ -123,7 +136,14 @@ df_full = pd.concat([df_train, df_test])
 
 # preprocess categorical data (sex and title) into ordinal values
 enc = preprocessing.OrdinalEncoder(max_categories=5)
-df_full = get_name_and_title( df_full )
+#df_full = get_name_and_title( df_full )
+
+df_temp_name = df_full.apply( split_last_name, axis=1, result_type='expand' )
+df_temp_title = df_temp_name.apply( split_title, axis=1, result_type='expand' )
+
+df_full["LastName"] = df_temp_name[0]
+df_full["Title"] = df_temp_title[0]
+
 df_full["TitleOrd"] = enc.fit_transform(df_full[["Title"]])
 df_full["SexOrd"] = enc.fit_transform(df_full[["Sex"]])
 
@@ -131,7 +151,7 @@ df_full['TitleGrouped'] = df_full['Title']
 df_full['TitleGrouped'] = df_full.apply( get_other_titles, axis=1 )
 
 # create dummy variables / categories for the 5 title groupings
-df_titles = get_title_dummies( df_full )
+df_titles = get_column_dummies( df_full, 'TitleGrouped' )
 df_full = pd.merge(df_full, df_titles, on="PassengerId")
 
 df_full["IsMale"]        = df_full["Sex"].apply( lambda v: 1 if v == "male" else 0)
@@ -146,8 +166,24 @@ df_full["Pclass3"]       = df_full["Pclass"].apply( lambda v: 1 if v == 3 else 0
 
 df_full["P3orDeadTitle"] = df_full.apply( get_p3_or_dead_title, axis=1 )
 
+df_full["HasCabin"]      = df_full["Cabin"].apply( lambda v: 0 if pd.isna(v) else 1 )
+df_full["CabinDeck"]     = df_full["Cabin"].apply( split_cabin_deck )
+df_full["CabinRoom"]     = df_full["Cabin"].apply( split_cabin_room )
+
+# create dummy variables / categories for the 5 title groupings
+df_cabins = get_column_dummies( df_full, 'CabinDeck' )
+for i in ["A", "B", "C", "D", "E", "F", "G", "T"]:
+    df_full["Cabin" + i ] = df_cabins[i]
+#df_full = pd.merge(df_full, df_cabins, on="PassengerId")
+
+# create dummy variables / categories for the 5 title groupings
+df_full["Embarked"].fillna(value="S")
+df_embarked = get_column_dummies( df_full, 'Embarked' )
+for i in ["C", "Q", "S" ]:
+    df_full["Embark" + i ] = df_embarked[i]
+
 imputer = impute.KNNImputer(n_neighbors=5)
-l_imputed = imputer.fit_transform(df_full[[ "Age", "IsMale", "Mr", "Mrs", "Miss", "Master", "OtherMale", "OtherFemale", "Pclass" ]])
+l_imputed = imputer.fit_transform(df_full[[ "Age", "Mr", "Mrs", "Miss", "Master", "OtherMale", "OtherFemale", "Pclass" ]])
 
 df_full["AgeImputed"] = l_imputed[:,0].round(4)
 
@@ -161,7 +197,7 @@ df_full["AgeMinMax"] = scaler_fit_transform( minmax, df_full[["AgeImputed"]] )
 df_full["FppRobust"] = scaler_fit_transform( robust, df_full[["FarePerPerson"]] )
 df_full["FppMinMax"] = scaler_fit_transform( minmax, df_full[["FarePerPerson"]] )
 
-#print_subset(df_full[ (df_full["Age"].isna() ) ].copy())
+#print_subset(df_full[ df_full["CabinDeck"] == "T"].head(20))
 
 # prep the cleaned training data to write
 df_train_clean = df_full[ df_full[ "Survived" ].notna() ].copy()
