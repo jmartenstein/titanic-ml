@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 
+import argparse
 import re
 
 from sklearn  import preprocessing, impute
@@ -105,8 +106,14 @@ def scaler_fit_transform( scaler, df ):
 
 ### Main ###
 
+parser = argparse.ArgumentParser( description='Pre-process data from Titanic dataset' )
+parser.add_argument('-w', '--write', action='store_true', help='Write processed output to files')
+
+args = vars( parser.parse_args() )
+
 # load train data
 df_train = pd.read_csv(f"../data/kaggle/train.csv")
+
 
 # load test data with a Survived column to encode data
 df_test  = pd.read_csv(f"../data/kaggle/test.csv")
@@ -163,11 +170,18 @@ df_train_clean = df_full[ df_full[ "Survived" ].notna() ].copy()
 df_test_clean = df_full[ df_full[ "Survived" ].isna() ].copy()
 df_test_clean.drop( "Survived", axis=1, inplace=True )
 
-train_outfile = get_outfile_name("train.csv")
-print(f"write train shape: {df_train_clean.shape} to file: {train_outfile}")
-df_train_clean.to_csv(f"../data/kaggle/{train_outfile}", index=False)
+if args["write"]:
 
-test_outfile = get_outfile_name("test.csv")
-print(f"write test shape:  {df_test_clean.shape} to file: {test_outfile}")
-df_test_clean.to_csv(f"../data/kaggle/{test_outfile}", index=False)
+    train_outfile = get_outfile_name("train.csv")
+    print(f"write train shape: {df_train_clean.shape} to file: {train_outfile}")
+    df_train_clean.to_csv(f"../data/kaggle/{train_outfile}", index=False)
 
+    test_outfile = get_outfile_name("test.csv")
+    print(f"write test shape:  {df_test_clean.shape} to file: {test_outfile}")
+    df_test_clean.to_csv(f"../data/kaggle/{test_outfile}", index=False)
+
+else:
+
+    print("No output written to files")
+    print(f"  train shape: {df_train_clean.shape}")
+    print(f"  test shape:  {df_test_clean.shape}")
