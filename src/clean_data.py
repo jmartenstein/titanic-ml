@@ -71,9 +71,9 @@ def split_cabin_room( row ):
 
 def print_subset( df ):
 
-    df.sort_values(['GroupSize', 'LastName'], ascending=False, inplace=True)
+    #df.sort_values(['GroupSize', 'LastName'], ascending=False, inplace=True)
     print(df.columns)
-    print(df[ ["LastName", "Title", "TitleOrd", "Survived", "Pclass", "Embarked", "Cabin", "CabinDeck", "CabinRoom" ]].to_string())
+    print(df[ ["LastName", "LastNameOrd", "Title", "TitleOrd", "Survived", "Pclass", "Embarked", "Cabin", "Ticket" ]].to_string())
 
     return True
 
@@ -149,6 +149,7 @@ df_full["Title"] = df_temp_title[0]
 df_full['TitleGrouped'] = df_full['Title']
 df_full['TitleGrouped'] = df_full.apply( get_other_titles, axis=1 )
 
+df_full["LastNameOrd"] = enc.fit_transform(df_full[["LastName"]])
 df_full["TitleOrd"] = title_enc.fit_transform(df_full[["TitleGrouped"]])
 df_full["SexOrd"] = enc.fit_transform(df_full[["Sex"]])
 
@@ -161,6 +162,7 @@ df_full["IsChild"]       = df_full["Age"].apply( lambda v: 1 if v <= 16 else 0)
 df_full["IsYoungChild"]  = df_full["Age"].apply( lambda v: 1 if v <= 8 else 0)
 df_full["GroupSize"]     = df_full["SibSp"] + df_full["Parch"] + 1
 df_full["LargeGroup"]    = df_full["GroupSize"].apply( lambda v: 1 if v >= 5 else 0)
+df_full["SmallGroup"]    = df_full["GroupSize"].apply( lambda v: 1 if (v > 1 and v < 5) else 0 )
 df_full["IsAlone"]       = df_full["GroupSize"].apply( lambda v: 1 if v == 1 else 0 )
 df_full["Fare"]          = df_full["Fare"].apply( lambda v: 0 if np.isnan(v) else v )
 df_full["FarePerPerson"] = round((df_full["Fare"] / df_full["GroupSize"]),4)
@@ -206,7 +208,7 @@ df_full["AgeMinMax"] = scaler_fit_transform( minmax, df_full[["AgeImputed"]] )
 df_full["FppRobust"] = scaler_fit_transform( robust, df_full[["FarePerPerson"]] )
 df_full["FppMinMax"] = scaler_fit_transform( minmax, df_full[["FarePerPerson"]] )
 
-print_subset(df_full[ df_full["CabinDeck"] == "E"].head(20))
+print_subset(df_full[ df_full["GroupSize"] > 5].head(40))
 
 # prep the cleaned training data to write
 df_train_clean = df_full[ df_full[ "Survived" ].notna() ].copy()
