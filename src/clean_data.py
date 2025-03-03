@@ -73,7 +73,7 @@ def print_subset( df ):
 
     #df.sort_values(['GroupSize', 'LastName'], ascending=False, inplace=True)
     print(df.columns)
-    print(df[ ["LastName", "LastNameOrd", "Title", "TitleOrd", "Survived", "Pclass", "Embarked", "Cabin", "Ticket" ]].to_string())
+    print(df[ ["LastName", "GroupSurvived", "Title", "TitleOrd", "Survived", "Pclass", "Embarked", "Cabin", "Ticket" ]].to_string())
 
     return True
 
@@ -156,6 +156,20 @@ df_full["SexOrd"] = enc.fit_transform(df_full[["Sex"]])
 # create dummy variables / categories for the 5 title groupings
 df_titles = get_column_dummies( df_full, 'TitleGrouped' )
 df_full = pd.merge(df_full, df_titles, on="PassengerId")
+
+x_colname = "Ticket"
+xcol_frequency = df_full[[x_colname]].value_counts()
+df_frequency = xcol_frequency.reset_index()
+df_frequency.columns = [x_colname, "TicketFrequency"]
+
+xcol_survived = df_full.groupby([x_colname])["Survived"].sum()
+df_survived = xcol_survived.reset_index()
+df_survived.columns = [x_colname, "SurvivorCount"]
+
+df_survived = df_survived.merge(df_frequency, on="Ticket")
+df_survived["GroupSurvived"] = df_survived["SurvivorCount"].apply( lambda v: 1 if v > 1 else 0 )
+
+df_full = df_full.merge(df_survived, on="Ticket")
 
 df_full["IsMale"]        = df_full["Sex"].apply( lambda v: 1 if v == "male" else 0)
 df_full["IsChild"]       = df_full["Age"].apply( lambda v: 1 if v <= 16 else 0)
