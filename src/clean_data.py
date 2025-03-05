@@ -73,7 +73,8 @@ def print_subset( df ):
 
     #df.sort_values(['GroupSize', 'LastName'], ascending=False, inplace=True)
     print(df.columns)
-    print(df[ ["LastName", "GroupSurvived", "Title", "TitleOrd", "Survived", "Pclass", "Embarked", "Cabin", "Ticket" ]].to_string())
+    print(df[ ["LastName", "Survived", "TicketSurvivorScore", "Title",
+               "Pclass", "FamilySize", "TicketFrequency", "Ticket" ]].to_string())
 
     return True
 
@@ -157,6 +158,8 @@ df_full["SexOrd"] = enc.fit_transform(df_full[["Sex"]])
 df_titles = get_column_dummies( df_full, 'TitleGrouped' )
 df_full = pd.merge(df_full, df_titles, on="PassengerId")
 
+df_full["Died"] = df_full["Survived"].apply( lambda v: 1 if v == 0 else 0 )
+
 x_colname = "Ticket"
 xcol_frequency = df_full[[x_colname]].value_counts()
 df_frequency = xcol_frequency.reset_index()
@@ -164,22 +167,34 @@ df_frequency.columns = [x_colname, "TicketFrequency"]
 
 xcol_survived = df_full.groupby([x_colname])["Survived"].sum()
 df_survived = xcol_survived.reset_index()
-df_survived.columns = [x_colname, "SurvivorCount"]
+df_survived.columns = [x_colname, "TicketConfirmedAlive"]
 
 df_survived = df_survived.merge(df_frequency, on="Ticket")
-df_survived["GroupSurvived"] = df_survived["SurvivorCount"].apply( lambda v: 1 if v > 1 else 0 )
+df_survived["GroupSurvived"] = df_survived["TicketConfirmedAlive"].apply( lambda v: 1 if v > 1 else 0 )
 
 df_full = df_full.merge(df_survived, on="Ticket")
+
+xcol_died = df_full.groupby([x_colname])["Died"].sum()
+df_died = xcol_died.reset_index()
+df_died.columns = [x_colname, "TicketConfirmedDead"]
+
+df_died = df_died.merge(df_survived, on="Ticket")
+df_died["GroupDied"] = df_died["TicketConfirmedDead"].apply( lambda v: 1 if v > 1 else 0 )
+
+df_full = df_full.merge(df_died[["Ticket", "TicketConfirmedDead", "GroupDied"]], on="Ticket")
+
+df_full["GroupSurvivorScore"] = df_full["GroupSurvived"] - df_full["GroupDied"]
+df_full["TicketSurvivorScore"] = df_full["TicketConfirmedAlive"] - df_full["TicketConfirmedDead"]
 
 df_full["IsMale"]        = df_full["Sex"].apply( lambda v: 1 if v == "male" else 0)
 df_full["IsChild"]       = df_full["Age"].apply( lambda v: 1 if v <= 16 else 0)
 df_full["IsYoungChild"]  = df_full["Age"].apply( lambda v: 1 if v <= 8 else 0)
-df_full["GroupSize"]     = df_full["SibSp"] + df_full["Parch"] + 1
-df_full["LargeGroup"]    = df_full["GroupSize"].apply( lambda v: 1 if v >= 5 else 0)
-df_full["SmallGroup"]    = df_full["GroupSize"].apply( lambda v: 1 if (v > 1 and v < 5) else 0 )
-df_full["IsAlone"]       = df_full["GroupSize"].apply( lambda v: 1 if v == 1 else 0 )
+df_full["FamilySize"]     = df_full["SibSp"] + df_full["Parch"] + 1
+df_full["LargeGroup"]    = df_full["TicketFrequency"].apply( lambda v: 1 if v >= 5 else 0)
+df_full["SmallGroup"]    = df_full["TicketFrequency"].apply( lambda v: 1 if (v > 1 and v < 5) else 0 )
+df_full["IsAlone"]       = df_full["TicketFrequency"].apply( lambda v: 1 if v == 1 else 0 )
 df_full["Fare"]          = df_full["Fare"].apply( lambda v: 0 if np.isnan(v) else v )
-df_full["FarePerPerson"] = round((df_full["Fare"] / df_full["GroupSize"]),4)
+df_full["FarePerPerson"] = round((df_full["Fare"] / df_full["TicketFrequency"]),4)
 
 df_full["Pclass1"]       = df_full["Pclass"].apply( lambda v: 1 if v == 1 else 0 )
 df_full["Pclass2"]       = df_full["Pclass"].apply( lambda v: 1 if v == 2 else 0 )
@@ -222,7 +237,7 @@ df_full["AgeMinMax"] = scaler_fit_transform( minmax, df_full[["AgeImputed"]] )
 df_full["FppRobust"] = scaler_fit_transform( robust, df_full[["FarePerPerson"]] )
 df_full["FppMinMax"] = scaler_fit_transform( minmax, df_full[["FarePerPerson"]] )
 
-print_subset(df_full[ df_full["GroupSize"] > 5].head(40))
+print_subset(df_full[ df_full["TicketFrequency"] > 5].head(40))
 
 # prep the cleaned training data to write
 df_train_clean = df_full[ df_full[ "Survived" ].notna() ].copy()
