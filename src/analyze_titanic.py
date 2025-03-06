@@ -61,7 +61,6 @@ def print_feature_importance( model, colnames ):
         {'Feature': colnames, 'Gini Importance': importances}).sort_values(
             'Gini Importance', ascending=False)
     print(feature_imp_df)
-    print()
 
     return True
 
@@ -88,7 +87,7 @@ def plot_roc_curve( model, X, y ):
 
     return True
 
-def get_gradient_boosting_model(X, y, s_scoring):
+def get_gradient_boost_model(X, y, s_scoring):
 
     param_dist = {
         'learning_rate': np.arange(0.01, 0.1, 0.01),
@@ -109,12 +108,9 @@ def get_gradient_boosting_model(X, y, s_scoring):
 
     random_search.fit(X, y)
     best_params = random_search.best_params_
-    model = random_search.best_estimator_
+    best_model = random_search.best_estimator_
 
-    print(f"Best Params: {best_params}")
-    print()
-
-    return model
+    return best_model, best_params
 
 def get_random_forest_model( X, y ):
     pass
@@ -124,6 +120,8 @@ def validate_model_name( m ):
     valid_models = [ "women_only",
                      "women_and_children",
                      "children_and_rich_women",
+                     "gb_some_features",
+                     "random",
                      "rich_women",
                      "rich_non_misters",
                      "title_forest"
@@ -163,6 +161,10 @@ def predict_children_and_rich_women( X ):
                   axis=1 )
     return y
 
+def predict_random( X ):
+    y = [random.randint(0,1) for _ in range(len(X))]
+    return y
+
 
 ### MAIN ###
 
@@ -178,32 +180,42 @@ args = vars( parser.parse_args() )
 validate_model_name( args["model"] )
 s_function = "predict_" + args["model"]
 
-datestamp = "20250215.112744"
+datestamp = "20250304.171959"
 df_train = pd.read_csv(f"../data/kaggle/train.clean.{datestamp}.csv")
 df_test = pd.read_csv(f"../data/kaggle/test.clean.{datestamp}.csv")
 #df_test = pd.read_csv(f"../data/kaggle/test.csv")
 
-x_colnames = [ "Sex", "AgeImputed", "Pclass", "Mr" ]
+x_colnames = [ "IsMale", "Mr", "TitleOrd", "GroupSurvivorScore", "Pclass", "P3orDeadTitle" ]
 y_colname = [ "Survived" ]
 
 X = df_train[ x_colnames ]
 y = df_train[ y_colname ].values.ravel()
 
-X_train, X_test, y_train, y_test = train_test_split( X, y, test_size=0.5)
+X_train, X_test, y_train, y_test = train_test_split( X, y, test_size=0.2)
 if args['verbose']:
     print(f"Data Shapes train: {X_train.shape}, test: {X_test.shape}")
 
-threshold = 0.95
+threshold = 0.6
 
-if s_function == "predict_title_forest":
-    print("Title Forest goes here!")
-    y_test_preds = [random.randint(0,1) for _ in range(len(X_test))]
-    y_preds = [random.randint(0,1) for _ in range(len(df_test))]
+if s_function == "predict_gb_some_features":
+
+    gb_model, gb_params = get_gradient_boost_model( X_train, y_train, "balanced_accuracy" )
+    if args['verbose']:
+        print(f"Best Params: {gb_params}")
+        print_feature_importance( gb_model, x_colnames )
+
+    y_test_preds_proba = gb_model.predict_proba(X_test)
+    y_test_preds = (y_test_preds_proba[:,1] > threshold).astype(int)
+
     s_scores = get_y_scores_string( y_test, y_test_preds, args['verbose'] )
+
+    y_preds_proba = gb_model.predict_proba(df_test[x_colnames])
+    y_preds = (y_preds_proba[:,1] > threshold).astype(int)
+
 else:
+
     y_test_preds = locals()[s_function](X_test)
     s_scores = get_y_scores_string( y_test, y_test_preds, args['verbose'] )
-    #df_test["SurvivedProbability"] = y_proba[:,1]
     y_preds = locals()[s_function](df_test[x_colnames])
 
 print(f"Model: {args['model']}, {s_scores}")
