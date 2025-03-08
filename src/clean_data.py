@@ -78,16 +78,19 @@ def print_subset( df ):
 
     return True
 
-def get_p3_or_dead_title(row):
+def get_p3_or_dead_title( row ):
     l_dead_titles = [ 'Capt', 'Rev', 'Mr' ]
 
     s_title = row['Title']
     b_pclass3 = row['Pclass3']
 
-    if ( s_title in l_dead_titles ) or ( b_pclass3 == 1 ):
-        return 1
+    if ( s_title in l_dead_titles ):
+        if ( b_pclass3 == 1 ):
+            return 0
+        else:
+            return 1
     else:
-        return 0
+        return 2
 
 def get_other_titles( row ):
 
@@ -102,6 +105,31 @@ def get_other_titles( row ):
     else:
         return s_title
 
+def get_value_frequency_df(df, col_name):
+
+    col_freq = df[[col_name]].value_counts()
+    df_freq = col_freq.reset_index()
+
+    freq_col_name = col_name + "Frequency"
+    df_freq.columns = [col_name, freq_col_name]
+
+    return df_freq[ df_freq[ "TicketFrequency" ] > 1 ]
+
+def get_groupby_sum_df( df, df_freq, x_col_name, y_col_name ):
+
+    xcol_sum = df.groupby([x_col_name])[y_col_name].sum()
+    df_sum = xcol_sum.reset_index()
+
+    sum_col_name = x_col_name + "Confirmed" + y_col_name
+    group_col_name = "Group" + y_col_name
+
+    df_sum.columns = [x_colname, sum_col_name]
+
+    df_sum = df_sum.merge(df_freq, on=x_col_name)
+    df_sum[group_col_name] = df_sum[sum_col_name].apply( lambda v: 1 if v > 1 else 0 )
+
+    return df_sum
+
 def get_column_dummies( df, s_column ):
 
     df_temp = pd.DataFrame(df[["PassengerId", s_column ]])
@@ -111,7 +139,6 @@ def get_column_dummies( df, s_column ):
     df_titles = df_titles.map(lambda x: int(x))
 
     return df_titles
-
 
 def scaler_fit_transform( scaler, df ):
 
@@ -127,7 +154,6 @@ args = vars( parser.parse_args() )
 
 # load train data
 df_train = pd.read_csv(f"../data/kaggle/train.csv")
-
 
 # load test data with a Survived column to encode data
 df_test  = pd.read_csv(f"../data/kaggle/test.csv")
@@ -161,30 +187,19 @@ df_full = pd.merge(df_full, df_titles, on="PassengerId")
 df_full["Died"] = df_full["Survived"].apply( lambda v: 1 if v == 0 else 0 )
 
 x_colname = "Ticket"
-xcol_frequency = df_full[[x_colname]].value_counts()
-df_frequency = xcol_frequency.reset_index()
-df_frequency.columns = [x_colname, "TicketFrequency"]
+df_ticket_frequency = get_value_frequency_df( df_full, x_colname)
 
-xcol_survived = df_full.groupby([x_colname])["Survived"].sum()
-df_survived = xcol_survived.reset_index()
-df_survived.columns = [x_colname, "TicketConfirmedAlive"]
+#print(df_ticket_frequency.sort_values(by="TicketFrequency", ascending=False))
 
-df_survived = df_survived.merge(df_frequency, on="Ticket")
-df_survived["GroupSurvived"] = df_survived["TicketConfirmedAlive"].apply( lambda v: 1 if v > 1 else 0 )
+df_survived = get_groupby_sum_df( df_full, df_ticket_frequency, x_colname, "Survived" )
+df_full = pd.merge(df_full, df_survived, how='left', on=x_colname)
+df_full.drop("TicketFrequency", axis=1, inplace=True)
 
-df_full = df_full.merge(df_survived, on="Ticket")
-
-xcol_died = df_full.groupby([x_colname])["Died"].sum()
-df_died = xcol_died.reset_index()
-df_died.columns = [x_colname, "TicketConfirmedDead"]
-
-df_died = df_died.merge(df_survived, on="Ticket")
-df_died["GroupDied"] = df_died["TicketConfirmedDead"].apply( lambda v: 1 if v > 1 else 0 )
-
-df_full = df_full.merge(df_died[["Ticket", "TicketConfirmedDead", "GroupDied"]], on="Ticket")
+df_died = get_groupby_sum_df( df_full, df_ticket_frequency, x_colname, "Died" )
+df_full = pd.merge(df_full, df_died, how='left', on=x_colname)
 
 df_full["GroupSurvivorScore"] = df_full["GroupSurvived"] - df_full["GroupDied"]
-df_full["TicketSurvivorScore"] = df_full["TicketConfirmedAlive"] - df_full["TicketConfirmedDead"]
+df_full["TicketSurvivorScore"] = df_full["TicketConfirmedSurvived"] - df_full["TicketConfirmedDied"]
 
 df_full["IsMale"]        = df_full["Sex"].apply( lambda v: 1 if v == "male" else 0)
 df_full["IsChild"]       = df_full["Age"].apply( lambda v: 1 if v <= 16 else 0)
@@ -192,7 +207,8 @@ df_full["IsYoungChild"]  = df_full["Age"].apply( lambda v: 1 if v <= 8 else 0)
 df_full["FamilySize"]     = df_full["SibSp"] + df_full["Parch"] + 1
 df_full["LargeGroup"]    = df_full["TicketFrequency"].apply( lambda v: 1 if v >= 5 else 0)
 df_full["SmallGroup"]    = df_full["TicketFrequency"].apply( lambda v: 1 if (v > 1 and v < 5) else 0 )
-df_full["IsAlone"]       = df_full["TicketFrequency"].apply( lambda v: 1 if v == 1 else 0 )
+df_full["IsSolo"]        = df_full["TicketFrequency"].apply( lambda v: 1 if v == 1 else 0 )
+df_full["NoFamily"]      = df_full["FamilySize"].apply( lambda v: 0 if v > 1 else 1 )
 df_full["Fare"]          = df_full["Fare"].apply( lambda v: 0 if np.isnan(v) else v )
 df_full["FarePerPerson"] = round((df_full["Fare"] / df_full["TicketFrequency"]),4)
 
@@ -206,7 +222,7 @@ df_full["HasCabin"]      = df_full["Cabin"].apply( lambda v: 0 if pd.isna(v) els
 df_full["CabinDeck"]     = df_full["Cabin"].apply( split_cabin_deck )
 df_full["CabinRoom"]     = df_full["Cabin"].apply( split_cabin_room )
 
-df_full["CabinDeck"].fillna(value="X", inplace=True)
+df_full["CabinDeck"] = df_full["CabinDeck"].fillna(value="X")
 df_full["CabinOrd"] = enc.fit_transform(df_full[["CabinDeck"]])
 
 # create dummy variables / categories for the 5 title groupings
@@ -216,7 +232,7 @@ for i in ["A", "B", "C", "D", "E", "F", "G", "T"]:
 #df_full = pd.merge(df_full, df_cabins, on="PassengerId")
 
 # create dummy variables / categories for the 5 title groupings
-df_full["Embarked"].fillna(value="S", inplace=True)
+df_full["Embarked"] = df_full["Embarked"].fillna(value="S")
 df_embarked = get_column_dummies( df_full, 'Embarked' )
 for i in ["C", "Q", "S" ]:
     df_full["Embark" + i ] = df_embarked[i]
@@ -237,7 +253,7 @@ df_full["AgeMinMax"] = scaler_fit_transform( minmax, df_full[["AgeImputed"]] )
 df_full["FppRobust"] = scaler_fit_transform( robust, df_full[["FarePerPerson"]] )
 df_full["FppMinMax"] = scaler_fit_transform( minmax, df_full[["FarePerPerson"]] )
 
-print_subset(df_full[ df_full["TicketFrequency"] > 5].head(40))
+#print_subset(df_full[ df_full["TicketFrequency"] > 5].head(40))
 
 # prep the cleaned training data to write
 df_train_clean = df_full[ df_full[ "Survived" ].notna() ].copy()
