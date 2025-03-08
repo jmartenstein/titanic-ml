@@ -120,7 +120,7 @@ def validate_model_name( m ):
     valid_models = [ "women_only",
                      "women_and_children",
                      "children_and_rich_women",
-                     "gb_some_features",
+                     "gb_top5_features",
                      "random",
                      "rich_women",
                      "rich_non_misters",
@@ -184,8 +184,7 @@ datestamp = "20250308.123938"
 df_train = pd.read_csv(f"../data/kaggle/train.clean.{datestamp}.csv")
 df_test = pd.read_csv(f"../data/kaggle/test.clean.{datestamp}.csv")
 
-x_colnames = [ "IsMale", "Mr", "TitleOrd", "TicketSurvivorScore", "Pclass",
-               "P3orDeadTitle", "AgeImputed" ]
+x_colnames = [ "IsMale", "Mr", "TitleOrd", "TicketSurvivorScore", "P3orDeadTitle" ]
 y_colname = [ "Survived" ]
 
 X = df_train[ x_colnames ]
@@ -197,7 +196,7 @@ if args['verbose']:
 
 threshold = 0.6
 
-if s_function == "predict_gb_some_features":
+if s_function == "predict_gb_top5_features":
 
     gb_model, gb_params = get_gradient_boost_model( X_train, y_train, "balanced_accuracy" )
     if args['verbose']:
