@@ -113,19 +113,19 @@ def get_value_frequency_df(df, col_name):
     freq_col_name = col_name + "Frequency"
     df_freq.columns = [col_name, freq_col_name]
 
-    return df_freq[ df_freq[ "TicketFrequency" ] > 1 ]
+    return df_freq
 
-def get_groupby_sum_df( df, df_freq, x_col_name, y_col_name ):
+def get_groupby_sum_df( df, x_col_name, y_col_name ):
+
+    df = df[ df["TicketFrequency"] > 1 ]
 
     xcol_sum = df.groupby([x_col_name])[y_col_name].sum()
     df_sum = xcol_sum.reset_index()
 
     sum_col_name = x_col_name + "Confirmed" + y_col_name
     group_col_name = "Group" + y_col_name
-
     df_sum.columns = [x_colname, sum_col_name]
 
-    df_sum = df_sum.merge(df_freq, on=x_col_name)
     df_sum[group_col_name] = df_sum[sum_col_name].apply( lambda v: 1 if v > 1 else 0 )
 
     return df_sum
@@ -144,6 +144,7 @@ def scaler_fit_transform( scaler, df ):
 
     l_transformed = scaler.fit_transform(df)
     return l_transformed[:,0].round(4)
+
 
 ### Main ###
 
@@ -189,17 +190,19 @@ df_full["Died"] = df_full["Survived"].apply( lambda v: 1 if v == 0 else 0 )
 x_colname = "Ticket"
 df_ticket_frequency = get_value_frequency_df( df_full, x_colname)
 
+df_full = pd.merge(df_full, df_ticket_frequency, how='left', on=x_colname)
 #print(df_ticket_frequency.sort_values(by="TicketFrequency", ascending=False))
 
-df_survived = get_groupby_sum_df( df_full, df_ticket_frequency, x_colname, "Survived" )
+df_survived = get_groupby_sum_df( df_full, x_colname, "Survived" )
 df_full = pd.merge(df_full, df_survived, how='left', on=x_colname)
-df_full.drop("TicketFrequency", axis=1, inplace=True)
 
-df_died = get_groupby_sum_df( df_full, df_ticket_frequency, x_colname, "Died" )
+df_died = get_groupby_sum_df( df_full, x_colname, "Died" )
 df_full = pd.merge(df_full, df_died, how='left', on=x_colname)
 
 df_full["GroupSurvivorScore"] = df_full["GroupSurvived"] - df_full["GroupDied"]
+df_full["GroupSurvivorScore"] = df_full["GroupSurvivorScore"].fillna(value=0)
 df_full["TicketSurvivorScore"] = df_full["TicketConfirmedSurvived"] - df_full["TicketConfirmedDied"]
+df_full["TicketSurvivorScore"] = df_full["TicketSurvivorScore"].fillna(value=0)
 
 df_full["IsMale"]        = df_full["Sex"].apply( lambda v: 1 if v == "male" else 0)
 df_full["IsChild"]       = df_full["Age"].apply( lambda v: 1 if v <= 16 else 0)
@@ -273,6 +276,8 @@ if args["write"]:
     df_test_clean.to_csv(f"../data/kaggle/{test_outfile}", index=False)
 
 else:
+
+    #print(df_train_clean.info())
 
     print("No output written to files")
     print(f"  train shape: {df_train_clean.shape}")
