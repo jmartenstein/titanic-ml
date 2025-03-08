@@ -9,6 +9,8 @@ import random
 import argparse
 import sys
 
+from scipy import interpolate
+
 from sklearn import svm, preprocessing, ensemble
 from sklearn.model_selection import TunedThresholdClassifierCV, \
                                     RandomizedSearchCV, \
@@ -63,6 +65,31 @@ def print_feature_importance( model, colnames ):
     print(feature_imp_df)
 
     return True
+
+def calc_roc_curve( model, X, y, verbose):
+
+    y_preds_proba  = model.predict_proba(X)
+
+    fpr, tpr, thresh = ms.roc_curve(y, y_preds_proba[:,1])
+    roc_auc = ms.auc(fpr, tpr)
+
+    # Calculate the geometric mean
+    gmeans = np.sqrt(tpr * (1 - fpr))
+
+    # Locate the index of the largest gmean
+    index = np.argmax(gmeans)
+    threshold = thresh[index]
+
+    tpr_intrp = interpolate.interp1d(thresh, tpr)
+    fpr_intrp = interpolate.interp1d(thresh, fpr)
+
+    if verbose:
+        print(f"Test AUC {round(roc_auc,3)}")
+        print(f"Test optimal threshold {round(threshold,3)} at " \
+              f"tpr: {np.round(tpr_intrp(threshold),3)}, " \
+              f"fpr: {np.round(fpr_intrp(threshold),3)}")
+
+    return threshold
 
 def plot_roc_curve( model, X, y ):
 
@@ -197,7 +224,7 @@ if args["all_features"]:
     x_colnames = [i for i in df_train.columns if i not in columns_to_drop]
 
 else:
-    x_colnames = [ "IsMale", "Mr", "TitleOrd", "TicketSurvivorScore", "P3orDeadTitle" ]
+    x_colnames = [ "IsMale", "Fare", "TitleOrd", "TicketSurvivorScore", "P3orDeadTitle" ]
 
 y_colname = [ "Survived" ]
 
@@ -208,14 +235,15 @@ X_train, X_test, y_train, y_test = train_test_split( X, y, test_size=0.2)
 if args['verbose']:
     print(f"Data Shapes train: {X_train.shape}, test: {X_test.shape}")
 
-threshold = 0.6
 
 if s_function == "predict_gradient_boosted":
 
-    gb_model, gb_params = get_gradient_boost_model( X_train, y_train, "balanced_accuracy" )
+    gb_model, gb_params = get_gradient_boost_model( X_train, y_train, "f1_micro" )
     if args['verbose']:
         print(f"Best Params: {gb_params}")
         print_feature_importance( gb_model, x_colnames )
+
+    threshold = calc_roc_curve( gb_model, X_test, y_test, args["verbose"] )
 
     y_test_preds_proba = gb_model.predict_proba(X_test)
     y_test_preds = (y_test_preds_proba[:,1] > threshold).astype(int)
