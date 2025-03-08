@@ -120,7 +120,7 @@ def validate_model_name( m ):
     valid_models = [ "women_only",
                      "women_and_children",
                      "children_and_rich_women",
-                     "gb_top5_features",
+                     "gradient_boosted",
                      "random",
                      "rich_women",
                      "rich_non_misters",
@@ -172,6 +172,7 @@ parser = argparse.ArgumentParser( description='Analyze models for Titanic datase
 parser.add_argument('-v', '--verbose', action='store_true', help='Add verbose output')
 parser.add_argument('-m', '--model', help='Name of model to use')
 parser.add_argument('-n', '--number', help='Times to split / analyze data with model' )
+parser.add_argument('-a', '--all_features', action='store_true', help='User all features in model')
 parser.set_defaults( verbose=False, model='women_only', number=3 )
 
 args = vars( parser.parse_args() )
@@ -184,7 +185,20 @@ datestamp = "20250308.123938"
 df_train = pd.read_csv(f"../data/kaggle/train.clean.{datestamp}.csv")
 df_test = pd.read_csv(f"../data/kaggle/test.clean.{datestamp}.csv")
 
-x_colnames = [ "IsMale", "Mr", "TitleOrd", "TicketSurvivorScore", "P3orDeadTitle" ]
+if args["all_features"]:
+
+    columns_to_drop = [ "Survived", "Died", "Name", "Title", "TitleGrouped", "LastName", "Cabin",
+                        "Ticket", "Sex", "Age", "Embarked", "PassengerId", "CabinDeck",
+                        "CabinRoom", "SurvivorCount", "TicketConfirmedSurvived", "GroupSurvived",
+                        "GroupDied", "TicketConfirmedDied" ]
+    #columns_to_drop += [ "AgeImputed", "FarePerPerson", "FppMinMax", "SibSp", "Parch", "SexOrd",
+    #                     "AgeMinMax", "TicketConfirmedSurvived", "GroupSurvived",
+    #                     "TicketConfirmedDied", "GroupDied", "Died" ]
+    x_colnames = [i for i in df_train.columns if i not in columns_to_drop]
+
+else:
+    x_colnames = [ "IsMale", "Mr", "TitleOrd", "TicketSurvivorScore", "P3orDeadTitle" ]
+
 y_colname = [ "Survived" ]
 
 X = df_train[ x_colnames ]
@@ -196,7 +210,7 @@ if args['verbose']:
 
 threshold = 0.6
 
-if s_function == "predict_gb_top5_features":
+if s_function == "predict_gradient_boosted":
 
     gb_model, gb_params = get_gradient_boost_model( X_train, y_train, "balanced_accuracy" )
     if args['verbose']:
