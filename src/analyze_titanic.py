@@ -234,7 +234,7 @@ learning_models = [ 'gradient_boosted',
 validate_model_name( args["model"], learning_models )
 s_function = "predict_" + args["model"]
 
-datestamp = "20250308.123938"
+datestamp = "20250308.163757"
 df_train = pd.read_csv(f"../data/kaggle/train.clean.{datestamp}.csv")
 df_test = pd.read_csv(f"../data/kaggle/test.clean.{datestamp}.csv")
 
@@ -242,8 +242,8 @@ if args["all_features"]:
 
     columns_to_drop = [ "Survived", "Died", "Name", "Title", "TitleGrouped", "LastName", "Cabin",
                         "Ticket", "Sex", "Age", "Embarked", "PassengerId", "CabinDeck",
-                        "CabinRoom", "SurvivorCount", "TicketConfirmedSurvived", "GroupSurvived",
-                        "GroupDied", "TicketConfirmedDied" ]
+                        "CabinRoom", "TicketConfirmedSurvived", "LastNameConfirmedSurvived",
+                        "LastNameConfirmedDied", "TicketConfirmedDied" ]
     #columns_to_drop += [ "AgeImputed", "FarePerPerson", "FppMinMax", "SibSp", "Parch", "SexOrd",
     #                     "AgeMinMax", "TicketConfirmedSurvived", "GroupSurvived",
     #                     "TicketConfirmedDied", "GroupDied", "Died" ]
@@ -275,6 +275,7 @@ if args["model"] in learning_models:
         print_feature_importance( model, x_colnames )
 
     threshold = calc_roc_curve( model, X_test, y_test, args["verbose"] )
+    #threshold = 0.65
 
     y_test_preds_proba = model.predict_proba(X_test)
     y_test_preds = (y_test_preds_proba[:,1] > threshold).astype(int)
