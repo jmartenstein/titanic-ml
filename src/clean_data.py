@@ -123,10 +123,7 @@ def get_groupby_sum_df( df, x_col_name, y_col_name ):
     df_sum = xcol_sum.reset_index()
 
     sum_col_name = x_col_name + "Confirmed" + y_col_name
-    group_col_name = "Group" + y_col_name
-    df_sum.columns = [x_colname, sum_col_name]
-
-    df_sum[group_col_name] = df_sum[sum_col_name].apply( lambda v: 1 if v > 1 else 0 )
+    df_sum.columns = [x_col_name, sum_col_name]
 
     return df_sum
 
@@ -187,22 +184,22 @@ df_full = pd.merge(df_full, df_titles, on="PassengerId")
 
 df_full["Died"] = df_full["Survived"].apply( lambda v: 1 if v == 0 else 0 )
 
-x_colname = "Ticket"
-df_ticket_frequency = get_value_frequency_df( df_full, x_colname)
+x_colnames = [ "Ticket", "LastName" ]
 
-df_full = pd.merge(df_full, df_ticket_frequency, how='left', on=x_colname)
-#print(df_ticket_frequency.sort_values(by="TicketFrequency", ascending=False))
+for c in x_colnames:
 
-df_survived = get_groupby_sum_df( df_full, x_colname, "Survived" )
-df_full = pd.merge(df_full, df_survived, how='left', on=x_colname)
+    df_frequency = get_value_frequency_df( df_full, c)
 
-df_died = get_groupby_sum_df( df_full, x_colname, "Died" )
-df_full = pd.merge(df_full, df_died, how='left', on=x_colname)
+    df_full = pd.merge(df_full, df_frequency, how='left', on=c)
 
-df_full["GroupSurvivorScore"] = df_full["GroupSurvived"] - df_full["GroupDied"]
-df_full["GroupSurvivorScore"] = df_full["GroupSurvivorScore"].fillna(value=0)
-df_full["TicketSurvivorScore"] = df_full["TicketConfirmedSurvived"] - df_full["TicketConfirmedDied"]
-df_full["TicketSurvivorScore"] = df_full["TicketSurvivorScore"].fillna(value=0)
+    df_survived = get_groupby_sum_df( df_full, c, "Survived" )
+    df_full = pd.merge(df_full, df_survived, how='left', on=c)
+
+    df_died = get_groupby_sum_df( df_full, c, "Died" )
+    df_full = pd.merge(df_full, df_died, how='left', on=c)
+
+    df_full[c+"SurvivorScore"] = df_full[c+"ConfirmedSurvived"] - df_full[c+"ConfirmedDied"]
+    df_full[c+"SurvivorScore"] = df_full[c+"SurvivorScore"].fillna(value=0)
 
 df_full["IsMale"]        = df_full["Sex"].apply( lambda v: 1 if v == "male" else 0)
 df_full["IsChild"]       = df_full["Age"].apply( lambda v: 1 if v <= 16 else 0)
@@ -277,7 +274,7 @@ if args["write"]:
 
 else:
 
-    #print(df_train_clean.info())
+    print(df_train_clean.info())
 
     print("No output written to files")
     print(f"  train shape: {df_train_clean.shape}")
