@@ -11,18 +11,16 @@ import sys
 
 from scipy import interpolate
 
-from sklearn import svm, preprocessing, ensemble
-from sklearn.model_selection import TunedThresholdClassifierCV, \
-                                    RandomizedSearchCV, \
-                                    train_test_split, \
-                                    KFold, \
-                                    cross_val_score
+import sklearn.model_selection as md
+import sklearn.neural_network as nn
+import sklearn.ensemble as en
+
 
 ### FUNCTIONS ###
 
 def print_crossval_scores( model, X, y, num_folds ):
 
-    kf = KFold(n_splits=num_folds)
+    kf = md.KFold(n_splits=num_folds)
 
     s_scoring = "f1"
     l_raw_scores = cross_val_score( model, X, y, scoring=s_scoring, cv=kf)
@@ -55,14 +53,14 @@ def get_y_scores_string( y_true, y_pred, verbose=False ):
 
     return s_scores
 
-
 def print_feature_importance( model, colnames ):
 
-    importances = model.feature_importances_
-    feature_imp_df = pd.DataFrame(
-        {'Feature': colnames, 'Gini Importance': importances}).sort_values(
-            'Gini Importance', ascending=False)
-    print(feature_imp_df)
+    if hasattr(model, "feature_importances_"):
+        importances = model.feature_importances_
+        feature_imp_df = pd.DataFrame(
+            {'Feature': colnames, 'Gini Importance': importances}).sort_values(
+                'Gini Importance', ascending=False)
+        print(feature_imp_df)
 
     return True
 
@@ -114,6 +112,30 @@ def plot_roc_curve( model, X, y ):
 
     return True
 
+def get_multilayer_perceptron_model(X, y, s_scoring):
+
+    param_dist = {
+        'hidden_layer_sizes': [(50,), (100,), (100,100,), (150,), (150,150,), (200,) ],
+        'activation': ['tanh', 'relu'],
+        'solver': ['sgd', 'adam'],
+        'alpha': [0.0001, 0.05, 0.1, 0.5, 1, 10],
+        'learning_rate': ['constant','adaptive'],
+    }
+
+    mlp_classifier = nn.MLPClassifier(max_iter=2500)
+    random_search = md.RandomizedSearchCV( estimator=mlp_classifier,
+                                           param_distributions=param_dist,
+                                           n_iter=20,
+                                           cv=5,
+                                           scoring=s_scoring,
+                                           n_jobs=-1 )
+
+    random_search.fit(X, y)
+    best_params = random_search.best_params_
+    best_model = random_search.best_estimator_
+
+    return best_model, best_params
+
 def get_gradient_boost_model(X, y, s_scoring):
 
     param_dist = {
@@ -125,8 +147,8 @@ def get_gradient_boost_model(X, y, s_scoring):
         'min_samples_split': [ 30 ]
     }
 
-    gb_classifier = ensemble.GradientBoostingClassifier()
-    random_search = RandomizedSearchCV( estimator=gb_classifier,
+    gb_classifier = en.GradientBoostingClassifier()
+    random_search = md.RandomizedSearchCV( estimator=gb_classifier,
                                         param_distributions=param_dist,
                                         n_iter=50,
                                         cv=5,
@@ -142,19 +164,19 @@ def get_gradient_boost_model(X, y, s_scoring):
 def get_random_forest_model( X, y ):
     pass
 
-def validate_model_name( m ):
+def validate_model_name( m, learning_models ):
 
-    valid_models = [ "women_only",
-                     "women_and_children",
-                     "children_and_rich_women",
-                     "gradient_boosted",
-                     "random",
-                     "rich_women",
-                     "rich_non_misters",
-                     "title_forest"
-                   ]
+    static_models = [ "women_only",
+                      "women_and_children",
+                      "children_and_rich_women",
+                      "random",
+                      "rich_women",
+                      "rich_non_misters",
+                    ]
 
-    if not m in valid_models:
+    valid_models = static_models + learning_models
+
+    if not m in valid_models :
         print("No valid model. Choose one:")
         print("  " + ", ".join(valid_models))
         sys.exit(1)
@@ -205,7 +227,11 @@ parser.set_defaults( verbose=False, model='women_only', number=3 )
 args = vars( parser.parse_args() )
 #print(args)
 
-validate_model_name( args["model"] )
+learning_models = [ 'gradient_boosted',
+                    'multilayer_perceptron'
+                  ]
+
+validate_model_name( args["model"], learning_models )
 s_function = "predict_" + args["model"]
 
 datestamp = "20250308.123938"
@@ -231,26 +257,31 @@ y_colname = [ "Survived" ]
 X = df_train[ x_colnames ]
 y = df_train[ y_colname ].values.ravel()
 
-X_train, X_test, y_train, y_test = train_test_split( X, y, test_size=0.2)
+X_train, X_test, y_train, y_test = md.train_test_split( X, y, test_size=0.2)
 if args['verbose']:
     print(f"Data Shapes train: {X_train.shape}, test: {X_test.shape}")
 
 
-if s_function == "predict_gradient_boosted":
+if args["model"] in learning_models:
 
-    gb_model, gb_params = get_gradient_boost_model( X_train, y_train, "f1_micro" )
+    if s_function == "predict_gradient_boosted":
+        model, params = get_gradient_boost_model( X_train, y_train, "f1_weighted" )
+
+    if s_function == 'predict_multilayer_perceptron':
+        model, params = get_multilayer_perceptron_model( X_train, y_train, "f1_weighted" )
+
     if args['verbose']:
-        print(f"Best Params: {gb_params}")
-        print_feature_importance( gb_model, x_colnames )
+        print(f"Best Params: {params}")
+        print_feature_importance( model, x_colnames )
 
-    threshold = calc_roc_curve( gb_model, X_test, y_test, args["verbose"] )
+    threshold = calc_roc_curve( model, X_test, y_test, args["verbose"] )
 
-    y_test_preds_proba = gb_model.predict_proba(X_test)
+    y_test_preds_proba = model.predict_proba(X_test)
     y_test_preds = (y_test_preds_proba[:,1] > threshold).astype(int)
 
     s_scores = get_y_scores_string( y_test, y_test_preds, args['verbose'] )
 
-    y_preds_proba = gb_model.predict_proba(df_test[x_colnames])
+    y_preds_proba = model.predict_proba(df_test[x_colnames])
     y_preds = (y_preds_proba[:,1] > threshold).astype(int)
 
 else:
