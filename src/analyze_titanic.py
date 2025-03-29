@@ -140,11 +140,12 @@ def get_gradient_boost_model(X, y, s_scoring):
 
     param_dist = {
         'learning_rate': np.arange(0.01, 0.1, 0.01),
-        'n_estimators': [50, 75, 100, 125, 150, 175, 200],
-        'max_depth': [2, 3, 4, 5, 6],
+        'n_estimators': [100, 125, 150, 175, 200],
+        'max_depth': [ 15 ],
         'subsample': np.arange(0.2, 0.8, 0.1),
-        'max_features': [ 2 ],
-        'min_samples_split': [ 30 ]
+        'max_features': [ 10 ],
+        'min_samples_split': [ 2 ],
+        'min_samples_leaf': [ 1 ]
     }
 
     gb_classifier = en.GradientBoostingClassifier()
@@ -250,7 +251,7 @@ if args["all_features"]:
     x_colnames = [i for i in df_train.columns if i not in columns_to_drop]
 
 else:
-    x_colnames = [ "IsMale", "Fare", "TitleOrd", "TicketSurvivorScore", "P3orDeadTitle" ]
+    x_colnames = [ "IsMale", "Mr", "Pclass", "TitleOrd", "FarePerPerson", "AgeImputed", "CabinOrd" ]
 
 y_colname = [ "Survived" ]
 
